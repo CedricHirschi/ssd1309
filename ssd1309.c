@@ -5,7 +5,9 @@
 #include <string.h>
 #include <stdio.h>
 
-#include "fonts/vbzfont.h"
+#include "fonts/Font5x7FixedMono.h"
+
+#define SSD1309_DEFAULT_FONT Font5x7FixedMono
 
 #define SSD1309_default_memoryAddressingMode 0x00	 /** 0x00 = horizontal, 0x01 = vertical, 0x02 = page */
 #define SSD1309_default_contrastControl 0xFF		 /** 0x00 - 0xFF */
@@ -400,14 +402,21 @@ uint8_t ssd1309_draw_char_with_font(ssd1309_t *p, uint32_t x, uint32_t y, uint32
     if (c < font.first || c > font.last)
         return 0;
 
-    const GFXglyph glyph = font.glyph[(uint8_t)c];
+    const GFXglyph glyph = font.glyph[(uint8_t)c - font.first];
     const uint8_t *bitmap = font.bitmap + glyph.bitmapOffset;
 
     for (uint8_t xpos = 0; xpos < glyph.width; xpos++) {
         for (uint8_t ypos = 0; ypos < glyph.height; ypos++) {
             int bitIndex = ypos * glyph.width + xpos;
             if (bitmap[bitIndex / 8] & (1 << (7 - bitIndex % 8))) {
-                ssd1309_draw_pixel(p, x + (xpos + glyph.xOffset) * scale, y + (ypos + glyph.yOffset) * scale);
+                if (scale == 1)
+                {
+                    ssd1309_draw_pixel(p, x + xpos + glyph.xOffset, y + ypos + glyph.yOffset);
+                }
+                else
+                {
+                    ssd1309_draw_square(p, x + (xpos + glyph.xOffset) * scale, y + (ypos + glyph.yOffset) * scale, scale, scale);
+                }
             }
         }
     }
@@ -447,7 +456,7 @@ void ssd1309_draw_string_with_font(ssd1309_t *p, uint32_t x, uint32_t y, uint32_
  */
 void ssd1309_draw_char(ssd1309_t *p, uint32_t x, uint32_t y, uint32_t scale, char c)
 {
-    ssd1309_draw_char_with_font(p, x, y, scale, vbzfont, c);
+    ssd1309_draw_char_with_font(p, x, y, scale, SSD1309_DEFAULT_FONT, c);
 }
 
 /**
@@ -462,7 +471,7 @@ void ssd1309_draw_char(ssd1309_t *p, uint32_t x, uint32_t y, uint32_t scale, cha
  */
 void ssd1309_draw_string(ssd1309_t *p, uint32_t x, uint32_t y, uint32_t scale, const char *s)
 {
-    ssd1309_draw_string_with_font(p, x, y, scale, vbzfont, s);
+    ssd1309_draw_string_with_font(p, x, y, scale, SSD1309_DEFAULT_FONT, s);
 }
 
 vector2_t ssd1309_get_string_size_with_font(const GFXfont font, const char *s)
@@ -479,7 +488,7 @@ vector2_t ssd1309_get_string_size_with_font(const GFXfont font, const char *s)
 
 vector2_t ssd1309_get_string_size(const char *s)
 {
-    return ssd1309_get_string_size_with_font(vbzfont, s);
+    return ssd1309_get_string_size_with_font(SSD1309_DEFAULT_FONT, s);
 }
 
 /**
@@ -501,7 +510,7 @@ void ssd1309_printf(ssd1309_t *disp, uint32_t x, uint32_t y, uint32_t scale, con
     vsnprintf(buf, sizeof(buf), format, args);
     va_end(args);
 
-    uint32_t y_offset = y * vbzfont.yAdvance * scale;
+    uint32_t y_offset = y * SSD1309_DEFAULT_FONT.yAdvance * scale;
     uint32_t x_offset = x * 6 * scale;
 
     ssd1309_draw_string(disp, x_offset, y_offset, scale, buf);
