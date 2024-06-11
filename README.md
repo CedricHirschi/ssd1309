@@ -264,3 +264,132 @@ int main(void)
   }
 }
 ```
+
+### RP2040
+
+#### Including the driver
+
+Copy the files `ssd1309.c` and `ssd1309.h` as well as the `fonts` folder to the project directory, for example to a subdirectory `ssd1309`. The folder structure should look like this:
+
+```
+rp2040-project/
+├── ssd1309/
+│   ├── fonts/
+│   │   ├── Adafruit_GFX.h
+│   │   ├── vbzfont.h
+│   │   └── <any other fonts...>
+│   ├── ssd1309.c
+│   └── ssd1309.h
+├── CMakeLists.txt
+├── main.c
+└── <any other project files...>
+```
+
+In the `CMakeLists.txt` file, add the following lines to include the driver in the project:
+
+```cmake
+add_executable(rp2040-project
+    ...
+    ssd1309/ssd1309.c
+    ...
+)
+
+target_include_directories(rp2040-project PRIVATE
+    ...
+    ssd1309
+    ssd1309/fonts
+    ...
+)
+```
+
+The driver should then be available in the project.
+
+#### Using the driver
+
+The implementation in the firmware could look like this:
+
+```c
+#include <stdio.h>
+
+#include "pico/stdlib.h"
+#include "hardware/spi.h"
+
+#include "ssd1309.h"
+
+#define DISP_WIDTH 128
+#define DISP_HEIGHT 64
+#define DISP_PIN_SCK 10
+#define DISP_PIN_MOSI 11
+#define DISP_PIN_MISO 12
+#define DISP_PIN_CS 13
+#define DISP_PIN_DC 15
+#define DISP_PIN_RST 14
+#define DISP_SPI_INST spi1
+
+ssd1309_t disp;
+
+bool disp_spi_cb(uint8_t *data, size_t len)
+{
+    return spi_write_blocking(DISP_SPI_INST, data, len) == len;
+}
+
+bool disp_pin_cb(ssd1309_pin_t pin, bool value)
+{
+    switch (pin)
+    {
+    case SSD1309_PIN_DC:
+        gpio_put(DISP_PIN_DC, value);
+        break;
+    case SSD1309_PIN_RST:
+        gpio_put(DISP_PIN_RST, value);
+        break;
+    case SSD1309_PIN_CS:
+        // gpio_put(DISP_PIN_CS, value); // Handled by SPI
+        break;
+    }
+
+    return true;
+}
+
+void disp_delay_cb(uint32_t us)
+{
+    sleep_us(us);
+}
+
+int main()
+{
+    stdio_init_all();
+
+    gpio_set_function(DISP_PIN_SCK, GPIO_FUNC_SPI);
+    gpio_set_function(DISP_PIN_MOSI, GPIO_FUNC_SPI);
+    gpio_set_function(DISP_PIN_MISO, GPIO_FUNC_SPI);
+    gpio_set_function(DISP_PIN_CS, GPIO_FUNC_SPI);
+    printf("SPI baudrate: %u\n", spi_init(DISP_SPI_INST, 500000));
+
+    gpio_init(DISP_PIN_RST);
+    gpio_set_dir(DISP_PIN_RST, GPIO_OUT);
+    gpio_put(DISP_PIN_RST, true);
+    gpio_init(DISP_PIN_DC);
+    gpio_set_dir(DISP_PIN_DC, GPIO_OUT);
+    gpio_put(DISP_PIN_DC, true);
+
+    if (!ssd1309_init(&disp, DISP_WIDTH, DISP_HEIGHT, disp_spi_cb, disp_pin_cb, disp_delay_cb))
+    {
+        printf("Failed to initialize display\n");
+        return 1;
+    }
+
+    while (1)
+    {
+        float time = (float)to_ms_since_boot(get_absolute_time()) / 1000.0f;
+
+        ssd1309_clear(&disp);
+        ssd1309_printf(&disp, 0, 1, 1, "Time: %.2fs", (float)to_ms_since_boot(get_absolute_time()) / 1000.0f);
+        ssd1309_show(&disp);
+
+        sleep_ms(10);
+    }
+
+    return 0;
+}
+```
